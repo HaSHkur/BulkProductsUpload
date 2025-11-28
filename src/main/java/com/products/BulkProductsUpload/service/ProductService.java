@@ -1,67 +1,71 @@
 package com.products.BulkProductsUpload.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.products.BulkProductsUpload.exception.DuplicateProductException;
 import com.products.BulkProductsUpload.model.Product;
+import com.products.BulkProductsUpload.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
 
     private final S3Service s3Service;
-    private final S3Client s3Client;
+    private final ProductRepository productRepository;
     private final S3Presigner s3Presigner;
-    private final ObjectMapper objectMapper;
     private final String bucketName;
 
-    public ProductService(S3Service s3Service, S3Client s3Client, S3Presigner s3Presigner, ObjectMapper objectMapper, @org.springframework.beans.factory.annotation.Value("${aws.s3.bucket-name}") String bucketName) {
+    public ProductService(S3Service s3Service, ProductRepository productRepository, S3Presigner s3Presigner, @org.springframework.beans.factory.annotation.Value("${aws.s3.bucket-name}") String bucketName) {
         this.s3Service = s3Service;
-        this.s3Client = s3Client;
+        this.productRepository = productRepository;
         this.s3Presigner = s3Presigner;
-        this.objectMapper = objectMapper;
         this.bucketName = bucketName;
     }
 
-    public void uploadProducts(MultipartFile[] files, List<Product> products) throws IOException {
-        for (int i = 0; i < products.size(); i++) {
-            Product product = products.get(i);
-            MultipartFile file = files[i];
+    public void uploadProduct(MultipartFile[] files, Product product) throws IOException {
+        // 1. Check for duplicates
+        productRepository.findByName(product.getName()).ifPresent(p -> {
+            throw new DuplicateProductException("A product with the name '" + product.getName() + "' already exists.");
+        });
 
-            String folderName = "product-" + UUID.randomUUID();
-            String imageUrl = s3Service.uploadFile(file, folderName);
-            product.setImageUrl(imageUrl);
+        // 2. Upload images to S3
+        String productId = UUID.randomUUID().toString();
+        String folderName = "product-" + productId;
+        List<String> imageUrls = new ArrayList<>();
 
-            String productJson = objectMapper.writeValueAsString(product);
-            s3Service.saveJsonFile(folderName, productJson);
+        for (MultipartFile file : files) {
+            String s3key = s3Service.uploadFile(file, folderName);
+            imageUrls.add(s3key);
         }
+        
+        // 3. Save metadata to DynamoDB
+        product.setId(productId);
+        product.setImageUrls(imageUrls);
+        productRepository.save(product);
     }
 
-    public List<Product> getAllProducts() throws IOException {
-        List<Product> products = new ArrayList<>();
-        ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucketName).prefix("product-").build();
-        List<S3Object> objects = s3Client.listObjectsV2(listObjectsV2Request).contents();
-
-        for (S3Object object : objects) {
-            if (object.key().endsWith("product.json")) {
-                byte[] objectBytes = s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(bucketName).key(object.key()).build()).asByteArray();
-                Product product = objectMapper.readValue(objectBytes, Product.class);
-                product.setImageUrl(getPresignedUrl(product.getImageUrl()));
-                products.add(product);
-            }
-        }
+    public List<Product> getAllProducts() {
+        List<Product> products = productRepository.findAll();
+        
+        // Generate pre-signed URLs for each image
+        products.forEach(product -> {
+            List<String> presignedUrls = product.getImageUrls().stream()
+                    .map(this::getPresignedUrl)
+                    .collect(Collectors.toList());
+            product.setImageUrls(presignedUrls);
+        });
+        
         return products;
     }
 

@@ -23,18 +23,15 @@ public class S3Service {
 
     public String uploadFile(MultipartFile file, String folderName) throws IOException {
         String fileName = folderName + "/" + file.getOriginalFilename();
-        s3Client.putObject(PutObjectRequest.builder()
+        
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(fileName)
-                .build(), RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
-        return fileName;
-    }
+                .contentType(file.getContentType())
+                .contentDisposition("inline")
+                .build();
 
-    public void saveJsonFile(String folderName, String json) {
-        String fileName = folderName + "/product.json";
-        s3Client.putObject(PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(fileName)
-                .build(), RequestBody.fromString(json));
+        s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+        return fileName;
     }
 }
