@@ -1,6 +1,8 @@
 package com.products.BulkProductsUpload.service;
 
+import com.products.BulkProductsUpload.dto.PaginatedProductResponse;
 import com.products.BulkProductsUpload.exception.DuplicateProductException;
+import com.products.BulkProductsUpload.exception.ProductNotFoundException;
 import com.products.BulkProductsUpload.model.Product;
 import com.products.BulkProductsUpload.repository.ProductRepository;
 import org.springframework.stereotype.Service;
@@ -46,44 +48,45 @@ public class ProductService {
             String s3key = s3Service.uploadFile(file, folderName);
             imageUrls.add(s3key);
         }
-
+        
         product.setId(productId);
         product.setImageUrls(imageUrls);
         productRepository.save(product);
     }
 
-    public List<Product> getAllProducts() {
-        List<Product> products = productRepository.findAll();
+    public Product getProductById(String id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
 
-        products.forEach(product -> {
-            List<String> presignedUrls = product.getImageUrls().stream()
-                    .map(this::getPresignedUrl)
-                    .collect(Collectors.toList());
-            product.setImageUrls(presignedUrls);
-        });
-
-        return products;
+        List<String> presignedUrls = product.getImageUrls().stream()
+                .map(this::getPresignedUrl)
+                .collect(Collectors.toList());
+        product.setImageUrls(presignedUrls);
+        
+        return product;
     }
 
-    public List<Product> getProductsPaginated(int page, int pageSize) {
+    public PaginatedProductResponse getProductsPaginated(int page, int pageSize) {
         List<Product> allProducts = productRepository.findAll();
-
+        long totalProducts = allProducts.size();
+        int totalPages = (int) Math.ceil((double) totalProducts / pageSize);
+        
         int fromIndex = (page - 1) * pageSize;
-        if (fromIndex >= allProducts.size()) {
-            return Collections.emptyList();
+        if (fromIndex >= totalProducts) {
+            return new PaginatedProductResponse(Collections.emptyList(), totalProducts, page, pageSize, totalPages);
         }
 
-        int toIndex = Math.min(fromIndex + pageSize, allProducts.size());
+        int toIndex = Math.min(fromIndex + pageSize, (int) totalProducts);
         List<Product> paginatedList = allProducts.subList(fromIndex, toIndex);
 
-        paginatedList.forEach(product -> {
-            List<String> presignedUrls = product.getImageUrls().stream()
+        paginatedList.forEach(p -> {
+            List<String> presignedUrls = p.getImageUrls().stream()
                     .map(this::getPresignedUrl)
                     .collect(Collectors.toList());
-            product.setImageUrls(presignedUrls);
+            p.setImageUrls(presignedUrls);
         });
-
-        return paginatedList;
+        
+        return new PaginatedProductResponse(paginatedList, totalProducts, page, pageSize, totalPages);
     }
 
     private String getPresignedUrl(String key) {

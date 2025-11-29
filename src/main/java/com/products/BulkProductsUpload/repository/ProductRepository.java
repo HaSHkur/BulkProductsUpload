@@ -32,7 +32,6 @@ public class ProductRepository {
         this.nameIndex = productTable.index(NAME_INDEX);
 
         try {
-            // Define the Global Secondary Index
             CreateTableEnhancedRequest request = CreateTableEnhancedRequest.builder()
                     .globalSecondaryIndices(gsi -> gsi.indexName(NAME_INDEX)
                             .projection(p -> p.projectionType(ProjectionType.ALL))
@@ -40,7 +39,6 @@ public class ProductRepository {
                     .build();
             productTable.createTable(request);
 
-            // Add a waiter to ensure the table and index are active before proceeding
             DynamoDbWaiter dbWaiter = dynamoDbClient.waiter();
             DescribeTableRequest tableRequest = DescribeTableRequest.builder()
                     .tableName(TABLE_NAME)
@@ -54,6 +52,10 @@ public class ProductRepository {
 
     public void save(Product product) {
         productTable.putItem(product);
+    }
+
+    public Optional<Product> findById(String id) {
+        return Optional.ofNullable(productTable.getItem(Key.builder().partitionValue(id).build()));
     }
 
     public Optional<Product> findByName(String name) {

@@ -1,6 +1,7 @@
 package com.products.BulkProductsUpload.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.products.BulkProductsUpload.dto.PaginatedProductResponse;
 import com.products.BulkProductsUpload.model.Product;
 import com.products.BulkProductsUpload.service.ProductService;
 import jakarta.validation.ConstraintViolation;
@@ -8,6 +9,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -47,21 +48,14 @@ public class ProductController {
         return "Product uploaded successfully";
     }
 
-    @GetMapping
-    public List<Product> getProducts(
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer pageSize
-    ) {
-        boolean noPagination = (page == null && pageSize == null);
-
-        if (noPagination) {
-            return productService.getAllProducts();
-        }
-
-        int p = (page != null) ? page : 1;
-        int size = (pageSize != null) ? pageSize : 20;
-
-        return productService.getProductsPaginated(p, size);
+    @GetMapping("/{id}")
+    public Product getProductById(@PathVariable String id) {
+        return productService.getProductById(id);
     }
 
+    @GetMapping
+    public PaginatedProductResponse getProducts(@RequestParam(defaultValue = "1") int page,
+                                                @RequestParam(defaultValue = "10") int pageSize) {
+        return productService.getProductsPaginated(page, pageSize);
+    }
 }
