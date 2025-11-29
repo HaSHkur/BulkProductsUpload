@@ -10,10 +10,10 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,12 +34,10 @@ public class ProductService {
     }
 
     public void uploadProduct(MultipartFile[] files, Product product) throws IOException {
-        // 1. Check for duplicates
         productRepository.findByName(product.getName()).ifPresent(p -> {
             throw new DuplicateProductException("A product with the name '" + product.getName() + "' already exists.");
         });
 
-        // 2. Upload images to S3
         String productId = UUID.randomUUID().toString();
         String folderName = "product-" + productId;
         List<String> imageUrls = new ArrayList<>();
@@ -48,8 +46,7 @@ public class ProductService {
             String s3key = s3Service.uploadFile(file, folderName);
             imageUrls.add(s3key);
         }
-        
-        // 3. Save metadata to DynamoDB
+
         product.setId(productId);
         product.setImageUrls(imageUrls);
         productRepository.save(product);
@@ -57,16 +54,36 @@ public class ProductService {
 
     public List<Product> getAllProducts() {
         List<Product> products = productRepository.findAll();
-        
-        // Generate pre-signed URLs for each image
+
         products.forEach(product -> {
             List<String> presignedUrls = product.getImageUrls().stream()
                     .map(this::getPresignedUrl)
                     .collect(Collectors.toList());
             product.setImageUrls(presignedUrls);
         });
-        
+
         return products;
+    }
+
+    public List<Product> getProductsPaginated(int page, int pageSize) {
+        List<Product> allProducts = productRepository.findAll();
+
+        int fromIndex = (page - 1) * pageSize;
+        if (fromIndex >= allProducts.size()) {
+            return Collections.emptyList();
+        }
+
+        int toIndex = Math.min(fromIndex + pageSize, allProducts.size());
+        List<Product> paginatedList = allProducts.subList(fromIndex, toIndex);
+
+        paginatedList.forEach(product -> {
+            List<String> presignedUrls = product.getImageUrls().stream()
+                    .map(this::getPresignedUrl)
+                    .collect(Collectors.toList());
+            product.setImageUrls(presignedUrls);
+        });
+
+        return paginatedList;
     }
 
     private String getPresignedUrl(String key) {

@@ -35,7 +35,6 @@ public class Product {
         return name;
     }
 
-    // Required for DynamoDbBean to work with Lombok
     public void setId(String id) {
         this.id = id;
     }
