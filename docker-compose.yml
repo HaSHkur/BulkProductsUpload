@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack_main
+    ports:
+      - "4566:4566"            # Main endpoint for all services
+      - "4510-4559:4510-4559"  # For individual service endpoints (optional)
+    environment:
+      - SERVICES=s3,dynamodb   # Only start the services we need
+      - DEBUG=0
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./.localstack}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
