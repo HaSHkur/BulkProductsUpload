@@ -1,5 +1,6 @@
 package com.products.BulkProductsUpload.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.products.BulkProductsUpload.dto.PaginatedProductResponse;
 import com.products.BulkProductsUpload.model.Product;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -46,6 +48,26 @@ public class ProductController {
 
         productService.uploadProduct(files, product);
         return "Product uploaded successfully";
+    }
+
+    @PostMapping(value = "/bulk-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public String uploadBulkProducts(@RequestPart("files") MultipartFile[] files,
+                                     @RequestPart("products") String productsJson) throws IOException {
+        List<Product> products = objectMapper.readValue(productsJson, new TypeReference<List<Product>>() {});
+
+        if (files.length != products.size()) {
+            throw new IllegalArgumentException("The number of files must match the number of products.");
+        }
+
+        for (Product product : products) {
+            Set<ConstraintViolation<Product>> violations = validator.validate(product);
+            if (!violations.isEmpty()) {
+                throw new ConstraintViolationException(violations);
+            }
+        }
+
+        productService.uploadBulkProducts(files, products);
+        return "Products uploaded successfully";
     }
 
     @GetMapping("/{id}")

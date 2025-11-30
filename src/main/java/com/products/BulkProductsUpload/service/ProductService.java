@@ -16,7 +16,9 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -52,6 +54,35 @@ public class ProductService {
         product.setId(productId);
         product.setImageUrls(imageUrls);
         productRepository.save(product);
+    }
+
+    public void uploadBulkProducts(MultipartFile[] files, List<Product> products) throws IOException {
+        Set<String> productNamesInBatch = new HashSet<>();
+        for (Product product : products) {
+            if (!productNamesInBatch.add(product.getName())) {
+                throw new DuplicateProductException("The bulk request contains duplicate product names: '" + product.getName() + "'.");
+            }
+        }
+
+        for (Product product : products) {
+            productRepository.findByName(product.getName()).ifPresent(p -> {
+                throw new DuplicateProductException("A product with the name '" + product.getName() + "' already exists in the database.");
+            });
+        }
+
+        for (int i = 0; i < products.size(); i++) {
+            Product product = products.get(i);
+            MultipartFile file = files[i];
+
+            String productId = UUID.randomUUID().toString();
+            String folderName = "product-" + productId;
+            
+            String s3key = s3Service.uploadFile(file, folderName);
+            
+            product.setId(productId);
+            product.setImageUrls(Collections.singletonList(s3key));
+            productRepository.save(product);
+        }
     }
 
     public Product getProductById(String id) {
