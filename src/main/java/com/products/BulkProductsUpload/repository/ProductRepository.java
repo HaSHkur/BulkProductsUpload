@@ -1,6 +1,8 @@
 package com.products.BulkProductsUpload.repository;
 
 import com.products.BulkProductsUpload.model.Product;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbIndex;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 @Repository
 public class ProductRepository {
 
+    private static final Logger logger = LoggerFactory.getLogger(ProductRepository.class);
     public static final String TABLE_NAME = "Products";
     public static final String NAME_INDEX = "name-index";
     private final DynamoDbTable<Product> productTable;
@@ -32,6 +35,7 @@ public class ProductRepository {
         this.nameIndex = productTable.index(NAME_INDEX);
 
         try {
+            logger.info("Attempting to create DynamoDB table '{}' if it doesn't exist...", TABLE_NAME);
             CreateTableEnhancedRequest request = CreateTableEnhancedRequest.builder()
                     .globalSecondaryIndices(gsi -> gsi.indexName(NAME_INDEX)
                             .projection(p -> p.projectionType(ProjectionType.ALL))
@@ -39,14 +43,17 @@ public class ProductRepository {
                     .build();
             productTable.createTable(request);
 
+            logger.info("Table creation request sent. Waiting for table to become active...");
             DynamoDbWaiter dbWaiter = dynamoDbClient.waiter();
-            DescribeTableRequest tableRequest = DescribeTableRequest.builder()
-                    .tableName(TABLE_NAME)
-                    .build();
+            DescribeTableRequest tableRequest = DescribeTableRequest.builder().tableName(TABLE_NAME).build();
             dbWaiter.waitUntilTableExists(tableRequest);
+            logger.info("Table '{}' is active.", TABLE_NAME);
 
         } catch (ResourceInUseException e) {
-            // Table already exists, which is fine.
+            logger.info("Table '{}' already exists. Skipping creation.", TABLE_NAME);
+        } catch (Exception e) {
+            logger.error("FATAL: Failed to connect to or set up DynamoDB.", e);
+            throw new RuntimeException("Could not initialize ProductRepository. Please check DynamoDB/LocalStack connection.", e);
         }
     }
 

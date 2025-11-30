@@ -28,7 +28,7 @@ cd BulkProductsUpload
 
 ### Step 2: Start the Local AWS Environment
 
-The project includes a `docker-compose.yml` file to easily start a LocalStack container with the necessary AWS services.
+The project includes a `docker-compose.yml` file to easily start a LocalStack container with the necessary AWS services. The built-in healthcheck will ensure the command doesn't exit until the services are fully ready.
 
 In your terminal, from the root of the project directory, run:
 
@@ -36,24 +36,27 @@ In your terminal, from the root of the project directory, run:
 docker-compose up -d
 ```
 
-This command will:
-- Download the LocalStack Docker image.
-- Start a container in the background (`-d`).
-- Configure it to run S3 and DynamoDB services on `http://localhost:4566`.
-
 ### Step 3: Run the Spring Boot Application
 
-The project is pre-configured to automatically detect and connect to the LocalStack container.
+To connect to LocalStack, you must activate the `local` Spring profile when running the application.
 
-1.  **Open the project** in your favorite IDE (e.g., IntelliJ IDEA).
-2.  Locate the `BulkProductsUploadApplication.java` file.
-3.  **Run the `main` method**.
+#### Option A: From the Terminal (Recommended)
 
-Alternatively, you can run the application from the terminal:
+In your terminal, from the root of the project directory, run:
 
 ```sh
-./gradlew bootRun
+./gradlew bootRun --args='--spring.profiles.active=local'
 ```
+
+#### Option B: From an IDE (e.g., IntelliJ IDEA)
+
+1.  Open the project in your IDE.
+2.  Go to **Run -> Edit Configurations...**
+3.  Find the run configuration for `BulkProductsUploadApplication`.
+4.  Add the following to the **"Environment variables"** field:
+    -   **Name**: `SPRING_PROFILES_ACTIVE`
+    -   **Value**: `local`
+5.  Save the configuration and click the "Run" button.
 
 The application will start on `http://localhost:8080`.
 
@@ -63,18 +66,15 @@ The application will start on `http://localhost:8080`.
 
 Once the application is running, you can verify that everything is working correctly:
 
-1.  **Open your web browser** and navigate to the Swagger UI documentation:
-    [**http://localhost:8080/swagger-ui.html**](http://localhost:8080/swagger-ui.html)
-
-2.  **Use the API endpoints** to upload products and images. The data will be saved in the running LocalStack container, not in a real AWS account.
+1.  **Check the startup logs**: You should see the line `The following 1 profile is active: "local"`.
+2.  **Open Swagger UI**: Navigate to [**http://localhost:8080/swagger-ui.html**](http://localhost:8080/swagger-ui.html).
+3.  **Use the API endpoints** to upload and retrieve products. The data will be saved in the running LocalStack container.
 
 ---
 
 ## How It Works
 
--   **Spring Profiles**: The project uses a Spring Profile named `local`.
--   **`application-local.properties`**: This file exists in `src/main/resources` and automatically activates the `local` profile.
--   **`AwsLocalConfig.java`**: When the `local` profile is active, this configuration class creates AWS client beans that point to the LocalStack endpoint (`http://localhost:4566`).
--   **`AwsProdConfig.java`**: In a production environment (where the `local` profile is not active), this class creates standard AWS client beans.
-
-This setup ensures a clean separation between local development and production environments.
+-   **Spring Profiles**: The project uses a Spring Profile named `local` to separate local and production configurations.
+-   **Activation**: The `local` profile is activated by passing a command-line argument or environment variable.
+-   **`AwsLocalConfig.java`**: When the `local` profile is active, this class creates AWS client beans that point to the LocalStack endpoint (`http://localhost:4566`) and use fake credentials.
+-   **`AwsProdConfig.java`**: In a production environment (when the `local` profile is not active), this class creates standard AWS client beans that use the default credential provider chain.
